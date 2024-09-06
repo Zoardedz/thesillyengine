@@ -1,7 +1,5 @@
 use core::time;
-use std::{borrow::Borrow, default, ptr::null};
-
-use glium::{glutin::surface::WindowSurface, implement_vertex, index::{self, Index, NoIndices}, winit::{self, application::ApplicationHandler, event::{Event, WindowEvent}, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId}}, Display, DrawParameters, Frame, IndexBuffer, Program, Surface, VertexBuffer};
+use glium::{glutin::surface::WindowSurface, implement_vertex, index::{Index, NoIndices}, winit::{self, application::ApplicationHandler, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId}}, Display, DrawError, DrawParameters, Frame, IndexBuffer, Program, Surface, VertexBuffer};
 
 struct App {
     window : Option<Window>,
@@ -46,18 +44,20 @@ impl ApplicationHandler for App {
                 let mut frame : Frame = self.display.draw();
                 frame.clear_color(0.6, 0.2, 0.7, 1.0);
 
-                for i in (0..self.drawables.len()) {
-                    if self.drawables[i].index_buffer.is_none() {
-                        frame.draw(&self.drawables[i].vertex_buffer, &NoIndices(glium::index::PrimitiveType::TrianglesList), &self.drawables[i].shader_program, 
-                         &glium::uniforms::EmptyUniforms, &DrawParameters::default()).unwrap();   
+                match self.drawables.iter().map(|drawable : &Drawable| {
+                    match &drawable.index_buffer {
+                        Some(index_buffer) => frame.draw(&drawable.vertex_buffer, index_buffer, 
+                            &drawable.shader_program, &glium::uniforms::EmptyUniforms, &DrawParameters::default()),
+                        None => frame.draw(&drawable.vertex_buffer, &NoIndices(glium::index::PrimitiveType::TrianglesList), 
+                            &drawable.shader_program, &glium::uniforms::EmptyUniforms, &DrawParameters::default()),
                     }
-                    else {                        
-                        frame.draw(&self.drawables[i].vertex_buffer, (&self.drawables[i].index_buffer).as_ref().unwrap(), &self.drawables[i].shader_program, 
-                         &glium::uniforms::EmptyUniforms, &DrawParameters::default()).unwrap();
+                }).collect::<Result<Vec<()>, DrawError>>() {
+                   Ok(_) => frame.finish().unwrap(),
+                   Err(err) => {
+                        println!("An error has occurred while rendering a drawable, error: {}", err);
+                        frame.finish().unwrap()
                     }
-                }
-
-                frame.finish().unwrap();
+                };
             }
             _ => (),
         }
