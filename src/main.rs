@@ -1,8 +1,8 @@
 use core::time;
-use glium::{glutin::surface::WindowSurface, implement_vertex, index::{Index, NoIndices}, winit::{self, application::ApplicationHandler, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId}}, Display, DrawError, DrawParameters, Frame, IndexBuffer, Program, Surface, VertexBuffer};
+use glium::{glutin::surface::WindowSurface, implement_vertex, index::NoIndices, winit::{self, application::ApplicationHandler, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId}}, Display, DrawError, DrawParameters, Frame, IndexBuffer, Program, Surface, VertexBuffer};
 
 struct App {
-    window : Option<Window>,
+    window : Window,
     display : Display<WindowSurface>,
     drawables : Vec<Drawable>,
 }
@@ -23,15 +23,13 @@ struct Drawable {
 }
 
 impl ApplicationHandler for App {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+    fn resumed(&mut self, _: &ActiveEventLoop) {
         
     }
 
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, id: WindowId, event: WindowEvent) {
+    fn window_event(&mut self, event_loop: &ActiveEventLoop, _ : WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested => {
-                event_loop.exit();
-            },
+            WindowEvent::CloseRequested => event_loop.exit(),
 
             WindowEvent::RedrawRequested => {
                 // Redraw the application.
@@ -68,19 +66,21 @@ impl ApplicationHandler for App {
 fn main() {
     implement_vertex!(Vertex, position);
 
-    // 1. The **winit::EventLoop** for handling events.
-    let event_loop:EventLoop<()> = winit::event_loop::EventLoop::new().unwrap();
-    // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
-    // dispatched any events. This is ideal for games and similar applications.
-    event_loop.set_control_flow(ControlFlow::Poll);
-    
-    // 2. Create a glutin context and glium Display
-    let (window , display) = glium::backend::glutin::SimpleWindowBuilder::new()
-    .with_title("thesillyengine")
-    .with_inner_size(1280u32, 720u32)
-    .build(&event_loop);
+   // 1. The **winit::EventLoop** for handling events.
+   let event_loop:EventLoop<()> = winit::event_loop::EventLoop::new().unwrap();
 
-    let mut app = App {window: Some(window), display: display, drawables: vec!()};
+   // ControlFlow::Poll continuously runs the event loop, even if the OS hasn't
+   // dispatched any events. This is ideal for games and similar applications.
+   event_loop.set_control_flow(ControlFlow::Poll);
+   
+   // 2. Create a glutin context and glium Display
+   let (window , display) = glium::backend::glutin::SimpleWindowBuilder::new()
+   .with_title("thesillyengine")
+   .with_inner_size(1280u32, 720u32)
+   .build(&event_loop);
+
+    let mut app = App { window: window, display, drawables: vec!()};
+    
     let vertex_shader : String = String::from(r#"#version 140
 
         in vec3 position;
@@ -99,14 +99,20 @@ fn main() {
 
     let vertices = vec![
         Vertex { position: [-0.5, -0.5, 1.0] },
-        Vertex { position: [ 0.0,  0.5, 1.0] },
-        Vertex { position: [ 0.5, -0.5, 1.0] }
+        Vertex { position: [-0.5,  0.5, 1.0] },
+        Vertex { position: [0.5, 0.5, 1.0] },
+        Vertex { position: [ 0.5, -0.5, 1.0] },
     ];
 
-    let buf : VertexBuffer<Vertex> = VertexBuffer::new(&app.display, &vertices).unwrap();
-    let program : Program = Program::from_source(&app.display, vertex_shader.as_str(), pixel_shader.as_str(), None).unwrap();
+    let vertex_buffer : VertexBuffer<Vertex> = VertexBuffer::new(&app.display, &vertices).unwrap();
+    let indices : Vec<u32> = vec!(0u32, 1u32, 2u32, 0u32, 2u32, 3u32);
+    let shader_program : Program = Program::from_source(&app.display, vertex_shader.as_str(), pixel_shader.as_str(), None).unwrap();
+    let i_buf : IndexBuffer<u32> = IndexBuffer::new(&app.display, glium::index::PrimitiveType::TrianglesList, &indices).unwrap();
 
-    app.drawables.push(Drawable {vertex_shader, pixel_shader, vertices: vertices, index_buffer: None, indices: vec!(), vertex_buffer: buf, shader_program: program});
-
-    event_loop.run_app(&mut app).unwrap();
+    app.drawables.push(Drawable {vertex_shader, pixel_shader, vertices, index_buffer: Some(i_buf), indices, vertex_buffer, shader_program});
+    
+    match event_loop.run_app(&mut app) {
+        Ok(_) => (),
+        Err(err) => println!("An error occurred with the event loop, attempting exit. {}", err),
+    };
 }
