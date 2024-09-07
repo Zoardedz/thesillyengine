@@ -1,10 +1,19 @@
 use core::time;
-use glium::{glutin::surface::WindowSurface, implement_vertex, index::NoIndices, winit::{self, application::ApplicationHandler, event::WindowEvent, event_loop::{ActiveEventLoop, ControlFlow, EventLoop}, window::{Window, WindowId}}, Display, DrawError, DrawParameters, Frame, IndexBuffer, Program, Surface, VertexBuffer};
+use egui::Color32;
+use egui::Rangef;
+use egui::Vec2;
+use egui::ViewportId;
+use egui::Ui;
+use egui_glium::EguiGlium;
+use glium::{glutin::surface::WindowSurface, implement_vertex, index::NoIndices, Display, DrawError, DrawParameters, Frame, IndexBuffer, Program, Surface, VertexBuffer};
+use winit::{event::{Event, WindowEvent}, event_loop::{ControlFlow, EventLoop, EventLoopWindowTarget}, window::Window};
 
 struct App {
     window : Window,
     display : Display<WindowSurface>,
     drawables : Vec<Drawable>,
+    //egui stuff
+    egui_handler : EguiGlium,
 }
 
 #[derive(Copy, Clone)]
@@ -22,15 +31,11 @@ struct Drawable {
     shader_program : Program,
 }
 
-impl ApplicationHandler for App {
-    fn resumed(&mut self, _: &ActiveEventLoop) {
-        
-    }
-
-    fn window_event(&mut self, event_loop: &ActiveEventLoop, _ : WindowId, event: WindowEvent) {
+impl App {
+    fn window_event(&mut self, event : &WindowEvent, win_target : &EventLoopWindowTarget<()>) {
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
-
+            WindowEvent::CloseRequested | WindowEvent::Destroyed => win_target.exit(),
+            WindowEvent::Resized(new_size) => self.display.resize((new_size.width, new_size.height)),
             WindowEvent::RedrawRequested => {
                 // Redraw the application.
                 //
@@ -50,7 +55,10 @@ impl ApplicationHandler for App {
                             &drawable.shader_program, &glium::uniforms::EmptyUniforms, &DrawParameters::default()),
                     }
                 }).collect::<Result<Vec<()>, DrawError>>() {
-                   Ok(_) => frame.finish().unwrap(),
+                   Ok(_) => {
+                    self.egui_handler.paint(&self.display, &mut frame);
+                    frame.finish().unwrap()
+                },
                    Err(err) => {
                         println!("An error has occurred while rendering a drawable, error: {}", err);
                         frame.finish().unwrap()
@@ -59,7 +67,6 @@ impl ApplicationHandler for App {
             }
             _ => (),
         }
-        std::thread::sleep(time::Duration::from_micros(80));
     }
 }
 
@@ -79,7 +86,9 @@ fn main() {
    .with_inner_size(1280u32, 720u32)
    .build(&event_loop);
 
-    let mut app = App { window: window, display, drawables: vec!()};
+   let egui_glium = egui_glium::EguiGlium::new(ViewportId::ROOT, &display, &window, &event_loop);
+
+    let mut app = App { egui_handler: egui_glium, window: window, display, drawables: vec!() };
     
     let vertex_shader : String = String::from(r#"#version 140
 
@@ -111,8 +120,31 @@ fn main() {
 
     app.drawables.push(Drawable {vertex_shader, pixel_shader, vertices, index_buffer: Some(i_buf), indices, vertex_buffer, shader_program});
     
-    match event_loop.run_app(&mut app) {
+    match event_loop.run(move |event, win_target| {
+
+        app.egui_handler.run(&app.window, |egui_ctx| {
+            egui::SidePanel::left("my_side_panel").resizable(false).show(egui_ctx, |ui| {
+                ui.visuals_mut().override_text_color = Some(Color32::from_rgb(211u8, 54u8, 178u8));
+                ui.heading("Haiii");
+            });
+        });
+
+        match event {
+            Event::WindowEvent { window_id: _,  event } => {
+                app.window_event(&event, win_target);
+                if app.egui_handler.on_event(&app.window, &event).repaint {
+                    app.window.request_redraw();
+                }
+            },
+            Event::NewEvents(winit::event::StartCause::ResumeTimeReached { .. }) => {
+                app.window.request_redraw();
+            }
+            _ => (),
+        }
+    }) {
         Ok(_) => (),
         Err(err) => println!("An error occurred with the event loop, attempting exit. {}", err),
     };
+
+    /**/
 }
