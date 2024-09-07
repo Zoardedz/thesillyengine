@@ -141,6 +141,8 @@ fn main() {
             }
             _ => (),
         }
+
+        std::thread::sleep(time::Duration::from_micros(80));
     }) {
         Ok(_) => (),
         Err(err) => println!("An error occurred with the event loop, attempting exit. {}", err),
